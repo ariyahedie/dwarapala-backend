@@ -1,0 +1,13 @@
+INSERT INTO usertype
+VALUES ('1', 'company');
+
+INSERT INTO usertype
+VALUES ('2', 'admin');
+
+INSERT INTO usertype
+VALUES ('3', 'member');
+
+INSERT INTO usertype
+VALUES ('4', 'superadmin');
+
+SELECT * FROM usertype;
