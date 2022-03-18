@@ -1,191 +1,137 @@
-from email.policy import default
-from flask import Flask, request
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.dialects.postgresql import UUID
-import uuid
-from datetime import datetime
+from flask import Flask, jsonify, request, session
 from flask_cors import CORS
+from flask_bcrypt import Bcrypt
+from flask_session import Session
+from datetime import datetime
+from config import ApplicationConfig
+from models import *
+from format_models import *
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:ariyahedie290500@localhost/dwarapala'
-db = SQLAlchemy(app)
-# CORS(app, resources={"/*": {"origins": ["http://localhost:3000"]}})
+app.config.from_object(ApplicationConfig)
+
+bcrypt = Bcrypt(app)
+server_session = Session(app)
+db.init_app(app)
+
+with app.app_context():
+  db.create_all()
+
 CORS(app)
-# app.config['supportsCredentials'] = True
-# app.config['allowedOrigins'] = ['*']
-# app.config['allowedOriginsPatterns'] = []
-# app.config['allowedHeaders'] = ['*']
-# app.config['allowedMethods'] = ['*']
-# app.config['exposedHeaders'] = []
-# app.config['maxAge'] = 0
-
-class Company(db.Model):
-  company_id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-  usertype_id = db.Column(db.Integer, db.ForeignKey('usertype.usertype_id'))
-  company_name = db.Column(db.String(50), nullable=False)
-  company_email = db.Column(db.String(50), nullable=False)
-  company_password = db.Column(db.String(50), nullable=False)
-  company_created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow())
-  company_account_status = db.Column(db.String(50), nullable=False, default='pending')
-
-  position = db.relationship('Position', backref='company')
-  department = db.relationship('Department', backref='company')
-  member = db.relationship('Member', backref='company')
-
-  def __init__(self, usertype_id, company_name, company_email, company_password):
-    self.usertype_id = usertype_id
-    self.company_name = company_name
-    self.company_email = company_email
-    self.company_password = company_password
-
-  def __repr__(self):
-    return f"Company: {self.company_name}"
-
-class Position(db.Model):
-  position_id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-  position_name = db.Column(db.String(50), nullable=False)
-  company_id = db.Column(UUID(as_uuid=True), db.ForeignKey('company.company_id'))
-
-  member = db.relationship('Member', backref='position')
-
-  def __init__(self, position_name, company_id):
-    self.position_name = position_name
-    self.company_id = company_id
-
-  def __repr__(self):
-    return f"Position: {self.position_name}"
-
-class Department(db.Model):
-  department_id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-  department_name = db.Column(db.String(50), nullable=False)
-  company_id = db.Column(UUID(as_uuid=True), db.ForeignKey('company.company_id'))
-
-  member = db.relationship('Member', backref='department')
-
-  def __init__(self, department_name, company_id):
-    self.department_name = department_name
-    self.company_id = company_id
-
-  def __repr__(self):
-    return f"Department: {self.department_name}"
-
-class Usertype(db.Model):
-  usertype_id = db.Column(db.Integer, primary_key=True)
-  usertype_name = db.Column(db.String(50), nullable=False)
-
-  member = db.relationship('Member', backref='usertype')
-  superadmin = db.relationship('Superadmin', backref='usertype')
-  company = db.relationship('Company', backref='usertype')
-
-  def __init__(self, usertype_name):
-    self.usertype_name = usertype_name
-
-  def __repr__(self):
-    return f"Usertype: {self.usertype_name}"
-
-class Member(db.Model):
-  member_id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-  company_id = db.Column(UUID(as_uuid=True), db.ForeignKey('company.company_id'))
-  position_id = db.Column(UUID(as_uuid=True), db.ForeignKey('position.position_id'))
-  usertype_id = db.Column(db.Integer, db.ForeignKey('usertype.usertype_id'))
-  department_id = db.Column(UUID(as_uuid=True), db.ForeignKey('department.department_id'))
-  member_name = db.Column(db.String(50), nullable=False)
-  member_email = db.Column(db.String(50), nullable=False)
-  member_password = db.Column(db.String(50), nullable=False)
-  member_images = db.Column(db.String(50), nullable=True, default='')
-  member_created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow())
-
-  def __init__(self, member_name, company_id, position_id, usertype_id, department_id, member_email, member_password, member_images):
-    self.member_name = member_name
-    self.company_id = company_id
-    self.position_id = position_id
-    self.usertype_id = usertype_id
-    self.department_id = department_id
-    self.member_email = member_email
-    self.member_password = member_password
-    self.member_images = member_images
-
-  def __repr__(self):
-    return f"Member: {self.member_name}"
-
-class Superadmin(db.Model):
-  superadmin_id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-  usertype_id = db.Column(db.Integer, db.ForeignKey('usertype.usertype_id'))
-  superadmin_name = db.Column(db.String(50), nullable=False)
-  superadmin_email = db.Column(db.String(50), nullable=False)
-  superadmin_password = db.Column(db.String(50), nullable=False)
-
-  def __init__(self, usertype_id, superadmin_name, superadmin_email, superadmin_password):
-    self.usertype_id = usertype_id
-    self.superadmin_name = superadmin_name
-    self.superadmin_email = superadmin_email
-    self.superadmin_password = superadmin_password
-
-  def __repr__(self):
-    return f"Superadmin: {self.superadmin_name}"
-
-class Log(db.Model):
-  log_id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-  member_id = db.Column(UUID(as_uuid=True), db.ForeignKey('member.member_id'))
-  log_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow())
-
-  def __init__(self, member_id, log_time):
-    self.member_id = member_id
-    self.log_time = log_time
-
-  def __repr__(self):
-    return f"Log Time: {self.log_time}, Member ID: {self.member_id}"
-
-class Image(db.Model):
-  image_id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-  member_id = db.Column(UUID(as_uuid=True), db.ForeignKey('member.member_id'))
-  image_name = db.Column(db.String(50), nullable=False)
-
-  def __init__(self, member_id, image_name):
-    self.member_id = member_id
-    self.image_name = image_name
-
-  def __repr__(self):
-    return f"Image Name: {self.image_name}, Member ID: {self.member_id}"
-
-def format_company(company):
-  return {
-    "id": company.company_id,
-    "name": company.company_name,
-    "usertype": company.usertype_id
-  }
-
-def format_usertype(usertype):
-  return {
-    "name": usertype.usertype_name
-  }
-
-def format_department(department):
-  return {
-    "department": department.department_name,
-    "company": department.company_id
-  }
-
-def format_position(position):
-  return {
-    "position": position.position_name,
-    "company": position.company_id
-  }
 
 @app.route('/')
 def index():
   return ''
 
-# create an company
-@app.route('/company', methods=['POST'])
+@app.route('/@me')
+def get_current_user():
+  user_id = session.get("user_id")
+
+  if not user_id:
+    return jsonify({"error": "Unauthorized"}), 401
+  
+  company = Company.query.filter_by(company_id=user_id).first()
+  if company is not None:
+    return jsonify({
+      "id": company.company_id,
+      "email": company.company_email
+    })
+
+  member = Member.query.filter_by(member_id=user_id).first()
+  if member is not None:
+    return jsonify({
+      "id": member.member_id,
+      "email": member.member_email
+    })
+
+  superadmin = Superadmin.query.filter_by(superadmin_id=user_id).first()
+  if superadmin is not None:
+    return jsonify({
+      "id": superadmin.superadmin_id,
+      "email": superadmin.superadmin_email
+    })
+
+# create a company
+@app.route('/signup-company', methods=['POST'])
 def create_company():
   name = request.json['name']
   email = request.json['email']
   password = request.json['password']
-  company = Company(1, name, email, password)
+
+  company_exists = Company.query.filter_by(company_email=email).first() is not None
+  member_exists = Member.query.filter_by(member_email=email).first() is not None
+  superadmin_exists = Superadmin.query.filter_by(superadmin_email=email).first() is not None
+
+  if company_exists or member_exists or superadmin_exists:
+    return jsonify({"error": "User already exists"}), 409
+
+  hashed_password = bcrypt.generate_password_hash(password).decode('utf8')
+  company = Company(1, name, email, hashed_password)
   db.session.add(company)
   db.session.commit()
   return format_company(company)
+
+# login
+@app.route('/login', methods=['POST'])
+def login():
+  email = request.json['email']
+  password = request.json['password']
+
+  company = Company.query.filter_by(company_email=email).first()
+  if company is not None:
+    if not bcrypt.check_password_hash(company.company_password, password):
+      return jsonify({"error": "Unauthorized"}), 401
+    session["user_id"] = company.company_id
+    return jsonify({
+      "id": company.company_id,
+      "email": company.company_email
+    })
+  
+  member= Member.query.filter_by(member_email=email).first()
+  if member is not None:
+    if not bcrypt.check_password_hash(member.member_password, password):
+      return jsonify({"error": "Unauthorized"}), 401
+    session["user_id"] = member.member_id
+    return jsonify({
+      "id": member.member_id,
+      "email": member.member_email
+    })
+  
+  superadmin = Superadmin.query.filter_by(superadmin_email=email).first()
+  if superadmin is not None:
+    if not bcrypt.check_password_hash(superadmin.superadmin_password, password):
+      return jsonify({"error": "Unauthorized"}), 401
+    session["user_id"] = superadmin.superadmin_id
+    return jsonify({
+      "id": superadmin.superadmin_id,
+      "email": superadmin.superadmin_email
+    })
+  # user_exists = company is not None or member is not None or superadmin is not None
+
+  # if not user_exists:
+  return jsonify({"error": "Unauthorized"}), 401
+
+# fetch companies
+@app.route('/company', methods=['GET'])
+def fetch_company():
+  companies = Company.query.order_by(Company.company_created_at.asc()).all()
+  company_list = []
+  for company in companies:
+    company_list.append(format_company(company))
+  return {
+    'companies': company_list
+  }
+
+# edit a company status
+@app.route('/company/<id>', methods=['PUT'])
+def update_company_status(id):
+  company = Company.query.filter_by(company_id=id)
+  status = request.json['status']
+  company.update(dict(company_account_status=status, company_created_at=datetime.utcnow()))
+  db.session.commit()
+  return {
+    'company': format_company(company.one())
+  }
 
 # create a department
 @app.route('/department', methods=['POST'])
@@ -243,18 +189,6 @@ def create_usertype():
 #   db.session.delete(event)
 #   db.session.commit()
 #   return f"Event (id: {id}) deleted!"
-
-# # edit an event
-# @app.route('/event/<id>', methods=['PUT'])
-# def update_event(id):
-#   event = Event.query.filter_by(id=id)
-#   description = request.json['description']
-#   event.update(dict(description=description, created_at=datetime.utcnow()))
-#   db.session.commit()
-#   return {
-#     'event': format_event(event.one())
-#   }
-
 
 if __name__ == '__main__':
   app.run(debug=True)

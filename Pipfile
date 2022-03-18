@@ -10,6 +10,9 @@ psycopg2 = "*"
 python-dotenv = "*"
 flask-cors = "*"
 uuid = "*"
+flask-bcrypt = "*"
+flask-session = "*"
+redis = "*"
 
 [dev-packages]
 
