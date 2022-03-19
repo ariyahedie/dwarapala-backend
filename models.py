@@ -77,7 +77,7 @@ class Member(db.Model):
   department_id = db.Column(UUID(as_uuid=True), db.ForeignKey('department.department_id'))
   member_name = db.Column(db.String(50), nullable=False)
   member_email = db.Column(db.String(50), nullable=False)
-  member_password = db.Column(db.String(50), nullable=False)
+  member_password = db.Column(db.Text, nullable=False)
   member_images = db.Column(db.String(50), nullable=True, default='')
   member_created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow())
 
@@ -99,7 +99,7 @@ class Superadmin(db.Model):
   usertype_id = db.Column(db.Integer, db.ForeignKey('usertype.usertype_id'))
   superadmin_name = db.Column(db.String(50), nullable=False)
   superadmin_email = db.Column(db.String(50), nullable=False)
-  superadmin_password = db.Column(db.String(50), nullable=False)
+  superadmin_password = db.Column(db.Text, nullable=False)
 
   def __init__(self, usertype_id, superadmin_name, superadmin_email, superadmin_password):
     self.usertype_id = usertype_id

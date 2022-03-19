@@ -23,3 +23,10 @@ def format_position(position):
     "position": position.position_name,
     "company": position.company_id
   }
+
+def format_superadmin(superadmin):
+  return {
+    "id": superadmin.superadmin_id,
+    "name": superadmin.superadmin_name,
+    "email": superadmin.superadmin_email
+  }

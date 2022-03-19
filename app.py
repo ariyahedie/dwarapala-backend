@@ -17,7 +17,7 @@ db.init_app(app)
 with app.app_context():
   db.create_all()
 
-CORS(app)
+CORS(app, supports_credentials=True)
 
 @app.route('/')
 def index():
@@ -34,6 +34,7 @@ def get_current_user():
   if company is not None:
     return jsonify({
       "id": company.company_id,
+      "usertype": company.usertype_id,
       "email": company.company_email
     })
 
@@ -41,6 +42,7 @@ def get_current_user():
   if member is not None:
     return jsonify({
       "id": member.member_id,
+      "usertype": member.usertype_id,
       "email": member.member_email
     })
 
@@ -48,6 +50,7 @@ def get_current_user():
   if superadmin is not None:
     return jsonify({
       "id": superadmin.superadmin_id,
+      "usertype": superadmin.usertype_id,
       "email": superadmin.superadmin_email
     })
 
@@ -72,7 +75,7 @@ def create_company():
   return format_company(company)
 
 # login
-@app.route('/login', methods=['POST'])
+@app.route('/login-user', methods=['POST'])
 def login():
   email = request.json['email']
   password = request.json['password']
@@ -87,7 +90,7 @@ def login():
       "email": company.company_email
     })
   
-  member= Member.query.filter_by(member_email=email).first()
+  member = Member.query.filter_by(member_email=email).first()
   if member is not None:
     if not bcrypt.check_password_hash(member.member_password, password):
       return jsonify({"error": "Unauthorized"}), 401
@@ -106,10 +109,13 @@ def login():
       "id": superadmin.superadmin_id,
       "email": superadmin.superadmin_email
     })
-  # user_exists = company is not None or member is not None or superadmin is not None
-
-  # if not user_exists:
+  
   return jsonify({"error": "Unauthorized"}), 401
+
+@app.route('/logout-user', methods=['POST'])
+def logout():
+  session.pop('user_id')
+  return '200'
 
 # fetch companies
 @app.route('/company', methods=['GET'])
@@ -161,6 +167,25 @@ def create_usertype():
   db.session.add(usertype)
   db.session.commit()
   return format_usertype(usertype)
+
+@app.route('/signup-superadmin', methods=['POST'])
+def create_superadmin():
+  name = request.json['name']
+  email = request.json['email']
+  password = request.json['password']
+
+  company_exists = Company.query.filter_by(company_email=email).first() is not None
+  member_exists = Member.query.filter_by(member_email=email).first() is not None
+  superadmin_exists = Superadmin.query.filter_by(superadmin_email=email).first() is not None
+
+  if company_exists or member_exists or superadmin_exists:
+    return jsonify({"error": "User already exists"}), 409
+
+  hashed_password = bcrypt.generate_password_hash(password).decode('utf8')
+  superadmin = Superadmin(4, name, email, hashed_password)
+  db.session.add(superadmin)
+  db.session.commit()
+  return format_superadmin(superadmin)
 
 # # get all events
 # @app.route('/event', methods=['GET'])
