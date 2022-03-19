@@ -34,22 +34,31 @@ def get_current_user():
   if company is not None:
     return jsonify({
       "id": company.company_id,
+      "name": company.company_name,
+      "created_at": company.company_created_at,
       "usertype": company.usertype_id,
-      "email": company.company_email
+      "email": company.company_email,
+      "status": company.company_account_status
     })
 
   member = Member.query.filter_by(member_id=user_id).first()
   if member is not None:
     return jsonify({
       "id": member.member_id,
+      "company": member.company_id,
+      "position": member.position_id,
       "usertype": member.usertype_id,
-      "email": member.member_email
+      "department": member.department_id,
+      "email": member.member_email,
+      "images": member.member_images,
+      "created_at": member.member_created_at
     })
 
   superadmin = Superadmin.query.filter_by(superadmin_id=user_id).first()
   if superadmin is not None:
     return jsonify({
       "id": superadmin.superadmin_id,
+      "name": superadmin.superadmin_name,
       "usertype": superadmin.usertype_id,
       "email": superadmin.superadmin_email
     })
@@ -81,7 +90,7 @@ def login():
   password = request.json['password']
 
   company = Company.query.filter_by(company_email=email).first()
-  if company is not None:
+  if company is not None and company.company_account_status == 'confirmed':
     if not bcrypt.check_password_hash(company.company_password, password):
       return jsonify({"error": "Unauthorized"}), 401
     session["user_id"] = company.company_id
