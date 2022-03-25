@@ -15,3 +15,9 @@ class ApplicationConfig:
   SESSION_PERMANENT = False
   SESSION_USE_SIGNER = True
   SESSION_REDIS = redis.from_url("redis://127.0.0.1:6379")
+
+class UsertypeId:
+  company = 1
+  admin = 2
+  member = 3
+  superadmin = 4

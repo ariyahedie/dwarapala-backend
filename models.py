@@ -78,7 +78,7 @@ class Member(db.Model):
   member_name = db.Column(db.String(50), nullable=False)
   member_email = db.Column(db.String(50), nullable=False)
   member_password = db.Column(db.Text, nullable=False)
-  member_images = db.Column(db.String(50), nullable=True, default='')
+  member_images = db.Column(db.Text, nullable=True, default='Dwarapala/images/')
   member_created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow())
 
   def __init__(self, member_name, company_id, position_id, usertype_id, department_id, member_email, member_password, member_images):

@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "2aabd4ac18a0d4b8bbe5c38004081984641ef80b694a42f7cd47ae00ea126389"
+            "sha256": "d9ac82e88e422a3412827f728f7fa5236ad0dfc552a021cf7b49d993a13a2139"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -328,6 +328,14 @@
             ],
             "index": "pypi",
             "version": "==0.19.2"
+        },
+        "random-password-generator": {
+            "hashes": [
+                "sha256:d8a8e2c0420fdd2c096bc7948f62701cb36761aea42e59c9a504d02f0e359d43",
+                "sha256:da9ce21a9b6a99dfda940596fe417a55470a2e0343fae56dea785f431780d8a9"
+            ],
+            "index": "pypi",
+            "version": "==2.2.0"
         },
         "redis": {
             "hashes": [

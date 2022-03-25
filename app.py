@@ -3,7 +3,7 @@ from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 from flask_session import Session
 from datetime import datetime
-from config import ApplicationConfig
+from config import ApplicationConfig, UsertypeId
 from models import *
 from format_models import *
 
@@ -129,12 +129,45 @@ def logout():
 # fetch companies
 @app.route('/company', methods=['GET'])
 def fetch_company():
-  companies = Company.query.order_by(Company.company_created_at.asc()).all()
+  companies = Company.query.order_by(Company.company_created_at.desc()).all()
   company_list = []
   for company in companies:
     company_list.append(format_company(company))
   return {
     'companies': company_list
+  }
+
+# fetch members
+@app.route('/member/<company_id>', methods=['GET'])
+def fetch_member(company_id):
+  members = Member.query.filter(Member.company_id==company_id).all()
+  member_list = []
+  for member in members:
+    member_list.append(format_member(member))
+  return {
+    'members': member_list
+  }
+
+# fetch departments
+@app.route('/department/<company_id>', methods=['GET'])
+def fetch_department(company_id):
+  departments = Department.query.filter(Department.company_id==company_id).all()
+  department_list = []
+  for department in departments:
+    department_list.append(format_department(department))
+  return {
+    'departments': department_list
+  }
+
+# fetch positions
+@app.route('/position/<company_id>', methods=['GET'])
+def fetch_position(company_id):
+  positions = Position.query.filter(Position.company_id==company_id).all()
+  position_list = []
+  for position in positions:
+    position_list.append(format_position(position))
+  return {
+    'positions': position_list
   }
 
 # edit a company status
@@ -163,6 +196,11 @@ def create_department():
 def create_position():
   position_name = request.json['position']
   company_id = request.json['company_id']
+
+  name_exists = Position.query.filter_by(position_name=position_name).first() is not None
+  if name_exists:
+    return jsonify({"error": "Position already exists"}), 409
+  
   position = Position(position_name, company_id)
   db.session.add(position)
   db.session.commit()
@@ -176,6 +214,29 @@ def create_usertype():
   db.session.add(usertype)
   db.session.commit()
   return format_usertype(usertype)
+
+# create a member
+@app.route('/member/<company_id>', methods=['POST'])
+def create_member(company_id):
+  usertype_name = request.json['usertype_name']
+  company_name = request.json['company_name']
+  position_id = request.json['position_id']
+  department_id = request.json['department_id']
+  name = request.json['name']
+  email = request.json['email']
+  password = request.json['password']
+  hashed_password = bcrypt.generate_password_hash(password).decode('utf8')
+  member_images = 'Dwarapala/images/' + company_name + '/' + email
+
+  if usertype_name == 'admin':
+    usertype_id = UsertypeId.admin
+  else:
+    usertype_id = UsertypeId.member
+
+  member = Member(name, company_id, position_id, usertype_id, department_id, email, hashed_password, member_images)
+  db.session.add(member)
+  db.session.commit()
+  return format_member(member)
 
 @app.route('/signup-superadmin', methods=['POST'])
 def create_superadmin():
@@ -196,25 +257,26 @@ def create_superadmin():
   db.session.commit()
   return format_superadmin(superadmin)
 
-# # get all events
-# @app.route('/event', methods=['GET'])
-# def get_events():
-#   events = Event.query.order_by(Event.id.asc()).all()
-#   event_list = []
-#   for event in events:
-#     event_list.append(format_event(event))
-#   return {
-#     'events': event_list
-#   }
+# get a company
+@app.route('/company/<company_id>', methods=['GET'])
+def get_company(company_id):
+  company = Company.query.filter_by(company_id=company_id).one()
+  formatted_company = format_company(company)
+  return {
+    'company': formatted_company
+  }
 
-# # get a single event
-# @app.route('/event/<id>', methods=['GET'])
-# def get_single_event(id):
-#   event = Event.query.filter_by(id=id).one()
-#   formatted_event = format_event(event)
-#   return {
-#     'event': formatted_event
-#   }
+@app.route('/admin-position-exist/<company_id>', methods=['GET'])
+def check_if_admin_position_exist(company_id):
+  isAdminPositionExist = Position.query.filter_by(company_id=company_id, position_name='Admin').first()
+  if isAdminPositionExist is not None:
+    return {
+      'position_id': isAdminPositionExist.position_id
+    }
+  return {
+    'position_id': ''
+  }
+    
 
 # # delete an event
 # @app.route('/event/<id>', methods=['DELETE'])

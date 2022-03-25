@@ -13,6 +13,7 @@ uuid = "*"
 flask-bcrypt = "*"
 flask-session = "*"
 redis = "*"
+random-password-generator = "*"
 
 [dev-packages]
 

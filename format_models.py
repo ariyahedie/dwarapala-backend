@@ -14,13 +14,15 @@ def format_usertype(usertype):
 
 def format_department(department):
   return {
-    "department": department.department_name,
+    "id": department.department_id,
+    "name": department.department_name,
     "company": department.company_id
   }
 
 def format_position(position):
   return {
-    "position": position.position_name,
+    "id": position.position_id,
+    "name": position.position_name,
     "company": position.company_id
   }
 
@@ -29,4 +31,17 @@ def format_superadmin(superadmin):
     "id": superadmin.superadmin_id,
     "name": superadmin.superadmin_name,
     "email": superadmin.superadmin_email
+  }
+
+def format_member(member):
+  return {
+    "id": member.member_id,
+    "name": member.member_name,
+    "email": member.member_email,
+    "created_at": member.member_created_at,
+    "company": member.company_id,
+    "position": member.position_id,
+    "department": member.department_id,
+    "images": member.member_images,
+    "usertype": member.usertype_id
   }
