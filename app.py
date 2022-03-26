@@ -45,6 +45,7 @@ def get_current_user():
   if member is not None:
     return jsonify({
       "id": member.member_id,
+      "name": member.member_name,
       "company": member.company_id,
       "position": member.position_id,
       "usertype": member.usertype_id,
@@ -197,8 +198,8 @@ def create_position():
   position_name = request.json['position']
   company_id = request.json['company_id']
 
-  name_exists = Position.query.filter_by(position_name=position_name).first() is not None
-  if name_exists:
+  already_existed = Position.query.filter_by(position_name=position_name, company_id=company_id).first() is not None
+  if already_existed:
     return jsonify({"error": "Position already exists"}), 409
   
   position = Position(position_name, company_id)
@@ -264,6 +265,23 @@ def get_company(company_id):
   formatted_company = format_company(company)
   return {
     'company': formatted_company
+  }
+
+# get a position by position_id
+@app.route('/position-by-position/<position_id>', methods=['GET'])
+def get_position(position_id):
+  position = Position.query.filter_by(position_id=position_id).one()
+  formatted_position = format_position(position)
+  return {
+    'position': formatted_position
+  }
+
+# get a department by department_id
+@app.route('/department-by-department/<department_id>', methods=['GET'])
+def get_department(department_id):
+  department = Department.query.filter_by(department_id=department_id).one()
+  return {
+    'department': format_department(department)
   }
 
 @app.route('/admin-position-exist/<company_id>', methods=['GET'])
