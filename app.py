@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, request, session, Response, flash, redirect
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 from flask_session import Session
@@ -6,6 +6,21 @@ from datetime import datetime
 from config import ApplicationConfig, UsertypeId
 from models import *
 from format_models import *
+from werkzeug.utils import secure_filename 
+
+import os
+import numpy as np
+from face_recognizer import Recognizer
+from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import Normalizer
+from sklearn.svm import SVC
+from camera import VideoCamera
+from PIL import Image
+import base64
+import io
+import shutil
+import time
+from face_recognizer import Recognizer
 
 app = Flask(__name__)
 app.config.from_object(ApplicationConfig)
@@ -19,9 +34,114 @@ with app.app_context():
 
 CORS(app, supports_credentials=True)
 
+def gen_face_det(camera):
+  while True:
+    frame = camera.get_frame_face_detection_only()
+    yield (b'--frame\r\n'
+      b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+
+def gen(camera, company_id):
+  recognizer = Recognizer()
+  # load face embeddings
+  filenames = os.listdir('member_images_dataset/'+company_id)
+  arr = np.load('member_images_dataset/'+company_id+'/'+filenames[0]+'/member_images_embeddings.npz')
+  arr_0, arr_1 = arr['arr_0'], arr['arr_1']
+
+  for index, filename in enumerate(filenames):
+    if index == 0:
+      continue
+    data = np.load('member_images_dataset/'+company_id+'/'+filename+'/member_images_embeddings.npz')
+    arr_0 = np.concatenate([arr_0, data['arr_0']])
+    arr_1 = np.concatenate([arr_1, data['arr_1']])
+  
+  trainX, trainy = arr_0, arr_1
+
+  # normalize input vectors
+  in_encoder = Normalizer(norm='l2')
+  trainX = in_encoder.transform(trainX)
+
+  # label encode targets
+  out_encoder = LabelEncoder()
+  out_encoder.fit(trainy)
+  trainy = out_encoder.transform(trainy)
+
+  # fit model
+  svc_model = SVC(kernel='linear', probability=True)
+  svc_model.fit(trainX, trainy)
+
+  # get keras model
+  model = recognizer.load_model('FaceNet_Keras_converted.h5')
+  
+  while True:
+    frame = camera.get_frame(model, svc_model, out_encoder)
+    yield (b'--frame\r\n'
+      b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+
+@app.route('/video_feed/<company_id>')
+def video_feed(company_id):
+  return Response(gen(VideoCamera(), company_id), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/capture_train_images/')
+def capture_train_images():
+  return Response(gen_face_det(VideoCamera()), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 @app.route('/')
 def index():
   return ''
+ 
+@app.route('/upload_image', methods=['POST'])
+def upload_image():
+  data = request.json['data']
+  company_id = request.json['company_id']
+  email = request.json['email']
+
+  directory = './member_images_dataset/'+(str(company_id))+'/'+(str(email))
+
+  # if data:
+  if not os.path.exists(directory):
+    os.mkdir(directory)
+  try:
+    time.sleep(1)
+    # print(result)
+    b = bytes(data, 'utf-8')
+    image = b[b.find(b'/9'):]
+    im = Image.open(io.BytesIO(base64.b64decode(image)))
+    file_count = len([entry for entry in os.listdir(directory) if os.path.isfile(os.path.join(directory, entry))])
+    im.save(directory+'/'+email+'('+str(file_count+1)+').jpg')
+  except:
+    pass
+  return 'done'
+
+@app.route('/update_embeddings/<company_id>/<email>', methods=['GET'])
+def update_embeddings(company_id, email):
+  recog = Recognizer()
+  recog.save_to_db(company_id, email)
+  recog.save_embeddings(company_id, email)
+  return 'updated'
+
+# do pictures of this user exist
+@app.route('/pic_count/<user_id>', methods=['GET'])
+def pic_count(user_id):
+  # company_id = request.json['company_id']
+  # email = request.json['email']
+  member = Member.query.filter_by(member_id=user_id).first()
+  path = './member_images_dataset/'+(str(member.company_id))+'/'+(str(member.member_email))
+
+  # print(os.path.exists(directory))
+  if not os.path.exists(path):
+    return {
+      'count': 0
+    }
+  else:
+    # create empty List
+    listOfFiles = list()
+    for (directory, subdirectories, file) in os.walk(path):
+      for f in file:
+        if '.jpg' in f:
+          listOfFiles.append(os.path.join(directory,f))
+    return {
+      'count': len(listOfFiles)
+    }
 
 @app.route('/@me')
 def get_current_user():
@@ -38,6 +158,7 @@ def get_current_user():
       "created_at": company.company_created_at,
       "usertype": company.usertype_id,
       "email": company.company_email,
+      "password": company.company_password,
       "status": company.company_account_status
     })
 
@@ -52,7 +173,8 @@ def get_current_user():
       "department": member.department_id,
       "email": member.member_email,
       "images": member.member_images,
-      "created_at": member.member_created_at
+      "created_at": member.member_created_at,
+      "password": member.member_password
     })
 
   superadmin = Superadmin.query.filter_by(superadmin_id=user_id).first()
@@ -61,7 +183,8 @@ def get_current_user():
       "id": superadmin.superadmin_id,
       "name": superadmin.superadmin_name,
       "usertype": superadmin.usertype_id,
-      "email": superadmin.superadmin_email
+      "email": superadmin.superadmin_email,
+      "password": superadmin.superadmin_password
     })
 
 # create a company
@@ -83,6 +206,118 @@ def create_company():
   db.session.add(company)
   db.session.commit()
   return format_company(company)
+
+# update a company name
+@app.route('/update-company-name/<company_id>', methods=['PUT'])
+def update_company_name(company_id):
+  company = Company.query.filter_by(company_id=company_id)
+  name = request.json['name']
+
+  if company is None:
+    return
+
+  company.update(dict(company_name=name, company_created_at=datetime.utcnow()))
+  db.session.commit()
+  return {
+    'company': format_company(company.one())
+  }
+
+# update a company password
+@app.route('/update-company-password/<company_id>', methods=['PUT'])
+def update_company_password(company_id):
+  company = Company.query.filter_by(company_id=company_id)
+
+  password = request.json['password']
+  newPassword = request.json['newPassword']
+  hashed_new_password = bcrypt.generate_password_hash(newPassword).decode('utf8')
+  
+  if not bcrypt.check_password_hash(company[0].company_password, password):
+    return jsonify({"error": "Unauthorized"}), 401
+
+  company.update(dict(company_password=hashed_new_password, company_created_at=datetime.utcnow()))
+  db.session.commit()
+  return {
+    'company': format_company(company.one())
+  }
+
+# update a superadmin name
+@app.route('/update-superadmin-name/<superadmin_id>', methods=['PUT'])
+def update_superadmin_name(superadmin_id):
+  superadmin = Superadmin.query.filter_by(superadmin_id=superadmin_id)
+  name = request.json['name']
+
+  if superadmin is None:
+    return
+
+  superadmin.update(dict(superadmin_name=name))
+  db.session.commit()
+  return {
+    'superadmin': format_superadmin(superadmin.one())
+  }
+
+# update a superadmin password
+@app.route('/update-superadmin-password/<superadmin_id>', methods=['PUT'])
+def update_superadmin_password(superadmin_id):
+  superadmin = Superadmin.query.filter_by(superadmin_id=superadmin_id)
+
+  password = request.json['password']
+  newPassword = request.json['newPassword']
+  hashed_new_password = bcrypt.generate_password_hash(newPassword).decode('utf8')
+  
+  if not bcrypt.check_password_hash(superadmin[0].superadmin_password, password):
+    return jsonify({"error": "Unauthorized"}), 401
+
+  superadmin.update(dict(superadmin_password=hashed_new_password))
+  db.session.commit()
+  return {
+    'superadmin': format_superadmin(superadmin.one())
+  }
+
+# update a admin name
+@app.route('/update-admin-name/<admin_id>', methods=['PUT'])
+def update_admin_name(admin_id):
+  admin = Member.query.filter_by(member_id=admin_id)
+  name = request.json['name']
+
+  if admin is None:
+    return
+
+  admin.update(dict(member_name=name))
+  db.session.commit()
+  return {
+    'admin': format_member(admin.one())
+  }
+
+# update a admin password
+@app.route('/update-admin-password/<admin_id>', methods=['PUT'])
+def update_admin_password(admin_id):
+  admin = Member.query.filter_by(member_id=admin_id)
+
+  password = request.json['password']
+  newPassword = request.json['newPassword']
+  hashed_new_password = bcrypt.generate_password_hash(newPassword).decode('utf8')
+  
+  if not bcrypt.check_password_hash(admin[0].member_password, password):
+    return jsonify({"error": "Unauthorized"}), 401
+
+  admin.update(dict(member_password=hashed_new_password))
+  db.session.commit()
+  return {
+    'admin': format_member(admin.one())
+  }
+
+# update admin department
+@app.route('/update-admin-department/<admin_id>', methods=['PUT'])
+def update_admin_department(admin_id):
+  admin = Member.query.filter_by(member_id=admin_id)
+
+  department_id = request.json['department_id']
+
+  admin.update(dict(department_id=department_id))
+  db.session.commit()
+  return {
+    'admin': format_member(admin.one())
+  }
 
 # login
 @app.route('/login-user', methods=['POST'])
@@ -227,7 +462,7 @@ def create_member(company_id):
   email = request.json['email']
   password = request.json['password']
   hashed_password = bcrypt.generate_password_hash(password).decode('utf8')
-  member_images = 'Dwarapala/images/' + company_name + '/' + email
+  member_images = 'Dwarapala/backend/member_images_dataset/' + company_name + '/' + name.replace(' ', '_')
 
   if usertype_name == 'admin':
     usertype_id = UsertypeId.admin

@@ -1,0 +1,25 @@
+# web backend dependencies
+flask
+flask-sqlalchemy
+psycopg2
+python-dotenv
+flask-cors
+uuid
+flask-bcrypt
+flask-session
+redis
+
+# face detection and face recognition dependencies
+opencv_python_headless==4.5.5.64
+opencv_python==4.5.5.64
+numpy==1.19.2
+joblib==0.17.0
+scipy==1.5.4
+mtcnn==0.1.0
+tensorflow==2.4.0
+gdown==3.12.2
+Keras==2.4.3
+scikit_learn==0.24.1
+Pillow
+imutils==0.5.3
+matplotlib
