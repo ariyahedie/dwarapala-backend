@@ -115,9 +115,8 @@ class Log(db.Model):
   member_id = db.Column(UUID(as_uuid=True), db.ForeignKey('member.member_id'))
   log_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow())
 
-  def __init__(self, member_id, log_time):
+  def __init__(self, member_id):
     self.member_id = member_id
-    self.log_time = log_time
 
   def __repr__(self):
     return f"Log Time: {self.log_time}, Member ID: {self.member_id}"

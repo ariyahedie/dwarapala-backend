@@ -8,6 +8,7 @@ uuid
 flask-bcrypt
 flask-session
 redis
+requests
 
 # face detection and face recognition dependencies
 opencv_python_headless==4.5.5.64
@@ -23,3 +24,4 @@ scikit_learn==0.24.1
 Pillow
 imutils==0.5.3
 matplotlib
+facenet-pytorch

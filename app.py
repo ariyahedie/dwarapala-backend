@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, session, Response, flash, redirect
+from flask import Flask, jsonify, request, session, Response
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 from flask_session import Session
@@ -6,21 +6,19 @@ from datetime import datetime
 from config import ApplicationConfig, UsertypeId
 from models import *
 from format_models import *
-from werkzeug.utils import secure_filename 
 
 import os
 import numpy as np
 from face_recognizer import Recognizer
-from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import Normalizer
-from sklearn.svm import SVC
 from camera import VideoCamera
 from PIL import Image
 import base64
 import io
-import shutil
 import time
 from face_recognizer import Recognizer
+import cv2
+from sklearn.preprocessing import LabelEncoder
+import tensorflow as tf
 
 app = Flask(__name__)
 app.config.from_object(ApplicationConfig)
@@ -42,44 +40,36 @@ def gen_face_det(camera):
 
 def gen(camera, company_id):
   recognizer = Recognizer()
-  # load face embeddings
-  filenames = os.listdir('member_images_dataset/'+company_id)
-  arr = np.load('member_images_dataset/'+company_id+'/'+filenames[0]+'/member_images_embeddings.npz')
-  arr_0, arr_1 = arr['arr_0'], arr['arr_1']
-
-  for index, filename in enumerate(filenames):
-    if index == 0:
-      continue
-    data = np.load('member_images_dataset/'+company_id+'/'+filename+'/member_images_embeddings.npz')
-    arr_0 = np.concatenate([arr_0, data['arr_0']])
-    arr_1 = np.concatenate([arr_1, data['arr_1']])
-  
-  trainX, trainy = arr_0, arr_1
-
-  # normalize input vectors
-  in_encoder = Normalizer(norm='l2')
-  trainX = in_encoder.transform(trainX)
-
-  # label encode targets
-  out_encoder = LabelEncoder()
-  out_encoder.fit(trainy)
-  trainy = out_encoder.transform(trainy)
-
-  # fit model
-  svc_model = SVC(kernel='linear', probability=True)
-  svc_model.fit(trainX, trainy)
-
   # get keras model
   model = recognizer.load_model('FaceNet_Keras_converted.h5')
+  # load the model from disk
+  ann_model = tf.keras.models.load_model('member_images_dataset/'+company_id+'/ann_model.h5')
+  out_encoder = LabelEncoder()
+  out_encoder.classes_ = np.load('member_images_dataset/'+company_id+'/classes.npy')
   
   while True:
-    frame = camera.get_frame(model, svc_model, out_encoder)
+    frame = camera.get_frame(model, ann_model, out_encoder)
     yield (b'--frame\r\n'
       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+
+def view_image(img_dir):
+  im = cv2.imread(img_dir)
+  img_str = cv2.imencode('.jpg', im)[1].tostring()
+  yield (b'--frame\r\n'
+      b'Content-Type: image/jpeg\r\n\r\n' + img_str + b'\r\n\r\n')
 
 @app.route('/video_feed/<company_id>')
 def video_feed(company_id):
   return Response(gen(VideoCamera(), company_id), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/image_view/<member_id>')
+def image_view(member_id):
+  member = Member.query.filter_by(member_id=member_id).first()
+  for (_, _, file) in os.walk(member.member_images):
+    for f in file:
+      if '.jpg' in f:
+        path = member.member_images +'/'+ f
+  return Response(view_image(path), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/capture_train_images/')
 def capture_train_images():
@@ -112,22 +102,20 @@ def upload_image():
     pass
   return 'done'
 
-@app.route('/update_embeddings/<company_id>/<email>', methods=['GET'])
-def update_embeddings(company_id, email):
+@app.route('/update_embeddings/<company_id>', methods=['GET'])
+def update_embeddings(company_id):
   recog = Recognizer()
-  recog.save_to_db(company_id, email)
-  recog.save_embeddings(company_id, email)
+  recog.save_to_db(company_id)
+  recog.save_embeddings(company_id)
+  recog.train_classification_model(company_id)
   return 'updated'
 
 # do pictures of this user exist
 @app.route('/pic_count/<user_id>', methods=['GET'])
 def pic_count(user_id):
-  # company_id = request.json['company_id']
-  # email = request.json['email']
   member = Member.query.filter_by(member_id=user_id).first()
   path = './member_images_dataset/'+(str(member.company_id))+'/'+(str(member.member_email))
 
-  # print(os.path.exists(directory))
   if not os.path.exists(path):
     return {
       'count': 0
@@ -373,6 +361,17 @@ def fetch_company():
     'companies': company_list
   }
 
+# fetch logs
+@app.route('/logs', methods=['GET'])
+def fetch_log():
+  logs = Log.query.order_by(Log.log_time.desc()).all()
+  log_list = []
+  for log in logs:
+    log_list.append(format_log(log))
+  return {
+    'logs': log_list
+  }
+
 # fetch members
 @app.route('/member/<company_id>', methods=['GET'])
 def fetch_member(company_id):
@@ -427,6 +426,16 @@ def create_department():
   db.session.commit()
   return format_department(department)
 
+# create a log
+@app.route('/log', methods=['POST'])
+def create_log():
+  member_email = request.json['member_email']
+  member = Member.query.filter_by(member_email=member_email).first()
+  log = Log(member.member_id)
+  db.session.add(log)
+  db.session.commit()
+  return format_log(log)
+
 # create a position
 @app.route('/position', methods=['POST'])
 def create_position():
@@ -455,14 +464,14 @@ def create_usertype():
 @app.route('/member/<company_id>', methods=['POST'])
 def create_member(company_id):
   usertype_name = request.json['usertype_name']
-  company_name = request.json['company_name']
+  # company_name = request.json['company_name']
   position_id = request.json['position_id']
   department_id = request.json['department_id']
   name = request.json['name']
   email = request.json['email']
   password = request.json['password']
   hashed_password = bcrypt.generate_password_hash(password).decode('utf8')
-  member_images = 'Dwarapala/backend/member_images_dataset/' + company_name + '/' + name.replace(' ', '_')
+  member_images = 'member_images_dataset/' + company_id + '/' + email
 
   if usertype_name == 'admin':
     usertype_id = UsertypeId.admin
@@ -502,6 +511,15 @@ def get_company(company_id):
     'company': formatted_company
   }
 
+# get a member
+@app.route('/member_by_id/<member_id>', methods=['GET'])
+def get_member(member_id):
+  member = Member.query.filter_by(member_id=member_id).one()
+  formatted_member = format_member(member)
+  return {
+    'member': formatted_member
+  }
+
 # get a position by position_id
 @app.route('/position-by-position/<position_id>', methods=['GET'])
 def get_position(position_id):
@@ -529,15 +547,6 @@ def check_if_admin_position_exist(company_id):
   return {
     'position_id': ''
   }
-    
-
-# # delete an event
-# @app.route('/event/<id>', methods=['DELETE'])
-# def delete_event(id):
-#   event = Event.query.filter_by(id=id).one()
-#   db.session.delete(event)
-#   db.session.commit()
-#   return f"Event (id: {id}) deleted!"
 
 if __name__ == '__main__':
   app.run(debug=True)

@@ -1,6 +1,6 @@
 from numpy import asarray
 from mtcnn.mtcnn import MTCNN
-from PIL import Image
+from yolo import yolov5
 import cv2
 
 class Detector:
@@ -8,35 +8,32 @@ class Detector:
     self.detector = MTCNN()
 
   # A function to draw bounding boxes on image
-  def draw_boxes(self, img, bboxes, name, color=(0,255,0), thickness=2):
+  def draw_boxes(self, img, box, name, color=(255,0,0), thickness=2):
     img_array = asarray(img)
     img_copy = img_array.copy()
-    for box in bboxes:
-      x1,y1,x2,y2 = box
-      frame = cv2.putText(img_copy, name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, thickness)
-      frame = cv2.rectangle(img_copy, (x1,y1), (x2,y2), color, thickness)
+    # for box in bboxes:
+    x1,x2,y1,y2 = box[0]
+    # if (x2-x1) >= 70:
+    frame = cv2.putText(img_copy, name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, thickness)
+    frame = cv2.rectangle(img_copy, (x1,y1), (x2,y2), color, thickness)
     return frame
   
   # detect face
   def detect_face(self, image, required_size=(160, 160)):
-    image = image.convert('RGB')
-    pixels = asarray(image)
+    # convert to RGB, if needed
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    # create the detector, using default weights
+    yolonet = yolov5()
     # detect faces in the image
-    results = self.detector.detect_faces(pixels)
-    if results:
-      # extract the bounding box from the first face
-      x1, y1, width, height = results[0]['box']
-      # bug fix
-      x1, y1 = abs(x1), abs(y1)
-      x2, y2 = x1 + width, y1 + height
-      # extract the face
-      face = pixels[y1:y2, x1:x2]
+    dets = yolonet.detect(image)
+
+    srcimg, _, box = yolonet.postprocess(image, dets)
+
+    if srcimg.any():
       # resize pixels to the model size
-      image = Image.fromarray(face)
-      image = image.resize(required_size)
-      face_array = asarray(image)
-      box = []
-      box.append((x1, y1, x2 ,y2))
-      return face_array, box
+      srcimg = cv2.resize(srcimg, required_size, interpolation= cv2.INTER_LINEAR)
     else:
-      return None, None
+      # resize pixels to the model size
+      srcimg = cv2.resize(image, required_size, interpolation= cv2.INTER_LINEAR)
+    face_array = asarray(srcimg)
+    return face_array, box

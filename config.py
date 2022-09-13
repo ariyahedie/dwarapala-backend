@@ -9,7 +9,7 @@ class ApplicationConfig:
 
   SQLALCHEMY_TRACK_MODIFICATIONS = False
   SQLALCHEMY_ECHO = True
-  SQLALCHEMY_DATABASE_URI = 'postgresql://postgres:ariyahedie290500@localhost/dwarapala'
+  SQLALCHEMY_DATABASE_URI = 'postgresql://postgres:[password]@localhost/dwarapala'
 
   SESSION_TYPE = "redis"
   SESSION_PERMANENT = False

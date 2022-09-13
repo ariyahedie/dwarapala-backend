@@ -45,3 +45,10 @@ def format_member(member):
     "images": member.member_images,
     "usertype": member.usertype_id
   }
+
+def format_log(log):
+  return {
+    "id": log.log_id,
+    "member_id": log.member_id,
+    "time": log.log_time
+  }
